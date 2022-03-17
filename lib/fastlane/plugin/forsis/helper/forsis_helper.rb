@@ -6,13 +6,14 @@ module Fastlane
       class Generator
         def self.generate(junit_report_path, sonarqube_report_path)
           junit_file = Nokogiri::XML(File.open(junit_report_path))
+          test_file_hash = get_all_paths()
           sonarqube_file = File.open("#{sonarqube_report_path}/Test_sonarqube_report.xml", 'w')
           test_suites = junit_file.xpath("//testsuite")
           builder = Nokogiri::XML::Builder.new do |xml|
             xml.testExecutions({ version: :'1' }) do
               test_suites.each do |test_file|
                 file_name = `echo #{test_file["name"]}| cut -d'.' -f 2`.gsub(/\n/, '')
-                file_path = get_test_file_path(file_name)
+                file_path = test_file_hash[file_name]
                 test_cases = []
                 test_file.children.each do |child|
                   test_cases << child if child.instance_of?(Nokogiri::XML::Element)
@@ -43,6 +44,31 @@ module Fastlane
 
         def self.get_test_file_path(file_name)
           `find . -iname "#{file_name}.swift"`.gsub(/\n/, '')
+        end
+
+        def self.get_all_paths()
+          test_files = []
+          test_files += `find . -type f -iname "*Test.swift"`.split
+          test_files += `find . -type f -iname "*Tests.swift"`.split
+          test_files += `find . -type f -iname "*Spec.swift"`.split
+          test_files += `find . -type f -iname "*Specs.swift"`.split
+          test_file_hash = Hash.new
+
+          test_files.each { |file|
+            file_name = file.split("/").last
+
+            if file_name.end_with?(".swift")
+              key = file_name.gsub('.swift', '')
+              value = file
+
+              if test_file_hash[key]
+                UI.important("Test #{key} exists in two locations: #{test_file_hash[key]} and #{value}")
+              else
+                test_file_hash[key] = value
+              end
+            end
+          }
+          return test_file_hash
         end
       end
 
